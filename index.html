@@ -224,7 +224,7 @@
     .detail .label { color: #bfdbfe; }
     .detail .value { color: #fff; }
 
-    .footer { color: #bfdbfe; }
+    .footer { color: #bfdbfe; font-size: 0.65rem; }
 
     /* Make the search button stand out on the dark card */
     .search button {
@@ -242,10 +242,10 @@
 
   <main class="app">
     <h1>Weather</h1>
-    <p class="subtitle">Search any city to see its current weather.</p>
+    <p class="subtitle">Search any city, town, or area to see its current weather.</p>
 
     <form class="search" id="searchForm">
-      <input type="text" id="cityInput" placeholder="Enter a city, e.g. Bengaluru" autocomplete="off" required>
+      <input type="text" id="cityInput" placeholder="Enter a city or area" autocomplete="off" required>
       <button type="submit" id="searchBtn">Search</button>
     </form>
 
@@ -305,17 +305,32 @@
       statusText.classList.toggle("error", isError);
     }
 
-    // Step 1: turn a city name into coordinates.
-    async function findCity(name) {
-      const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=1&language=en&format=json`;
+    // Step 1: turn a place name (city, town, or area) into coordinates.
+    // We try the name in India first, then as typed, then with "Bengaluru" added,
+    // so local areas such as Banashankari are found more often.
+    async function searchPlaces(name, country) {
+      const countryPart = country ? `&countryCode=${country}` : "";
+      const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}` +
+                  `&count=5&language=en&format=json${countryPart}`;
       const response = await fetch(url);
       if (!response.ok) throw new Error("Could not reach the location service.");
-
       const data = await response.json();
-      if (!data.results || data.results.length === 0) {
-        throw new Error(`No city found called "${name}". Check the spelling and try again.`);
+      return data.results || [];
+    }
+
+    async function findCity(name) {
+      const attempts = [
+        [name, "IN"],
+        [name, null],
+        [`${name} Bengaluru`, "IN"]
+      ];
+
+      for (const [query, country] of attempts) {
+        const results = await searchPlaces(query, country);
+        if (results.length > 0) return results[0]; // the best match
       }
-      return data.results[0]; // the best match
+
+      throw new Error(`No place found called "${name}". Try a nearby town, or add the city name, such as Banashankari, Bengaluru.`);
     }
 
     // Step 2: get the current weather for those coordinates.
